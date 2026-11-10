@@ -1,0 +1,16 @@
+.env
+.env.*
+*.key
+*.pem
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+chroma_db/
+*.faiss
+*.index
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
