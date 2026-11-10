@@ -7,5 +7,5 @@ Integrantes:
 Caio Gotardo - RM 574768 - 1CCPS
 Gabriel Akira - RM 576082 - 1CCPS
 
-Repositorio: https://github.com/PREENCHER-usuario/engman-copilot
-Fluxograma: https://github.com/PREENCHER-usuario/engman-copilot/blob/main/docs/arquitetura.png
+Repositorio: https://github.com/CaioGotardo/engman-copilot
+Fluxograma: https://github.com/CaioGotardo/engman-copilot/blob/main/docs/arquitetura.png
