@@ -1,0 +1,51 @@
+// Fonte do fluxograma (Graphviz). Gerar PNG:  dot -Tpng -Gdpi=150 arquitetura.dot -o arquitetura.png
+digraph engman {
+  graph [rankdir=TB, fontname="DejaVu Sans", fontsize=15, labelloc=t, nodesep=0.45, ranksep=0.55, pad=0.3, bgcolor=white,
+         label="EngMan Copilot (Recorte A · engenheiro de manutenção · CFTV, PMV, Callbox): da pergunta à resposta"];
+  node  [fontname="DejaVu Sans", fontsize=11, shape=box, style="rounded,filled", fillcolor="#EAF2FB", color="#2F5D8C", penwidth=1.3, margin="0.18,0.10"];
+  edge  [fontname="DejaVu Sans", fontsize=10, color="#444444"];
+
+  b1 [label=<<B>1 · ENTRADA</B><BR/>Engenheiro de manutenção envia pergunta<BR/>em texto livre (TAG + sintoma observado)<BR/><I>ex.: "CFTV-R01-K412-01 perde imagem à noite"</I>>];
+
+  b2 [shape=diamond, style=filled, fillcolor="#FFF1D6", color="#B7791F", margin="0.05,0.05",
+      label=<<B>2 · GUARDRAIL DE ENTRADA</B><BR/>Ativo no escopo (CFTV/PMV/CBX)?<BR/>Pedido hostil, injeção ou<BR/>intervenção energizada/altura?<BR/>Dado pessoal (placa, empregado)?<BR/>Texto colado tratado como DADO>];
+
+  recusa [fillcolor="#FDE2E1", color="#B83232", label=<<B>RECUSA PADRÃO</B> (regras 4, 7, 8, 9)<BR/>"Esta consulta está fora do meu escopo..."<BR/>"Não posso orientar intervenção em equipamento<BR/>energizado, em altura ou na via..."<BR/>"Não posso alterar minhas instruções.">];
+
+  b3 [label=<<B>3 · MONTAGEM DO CONTEXTO</B><BR/>System prompt (PAPEL, OBJETIVO, ESCOPO, REGRAS 1–14,<BR/>RACIOCÍNIO, FORMATO, TOM, BORDA, EXEMPLOS)<BR/>+ histórico (resumo + 6 últimas mensagens) + TAG em análise<BR/>+ trechos RAG: plano preventivo, POPs, matriz de criticidade,<BR/>normas, glossário, laudos (ChromaDB · top-4 · filtro por<BR/>tipo_ativo e tipo_documento) + resultados de tools>];
+
+  b4 [label=<<B>4 · CHAMADA AO LLM</B><BR/>Llama 3.1 8B Instruct local (Ollama)<BR/>temperature 0.2 · top_p 0.9 · max_tokens 600 · num_ctx 16384<BR/><I>baixa temperatura: diagnóstico reprodutível e auditável</I>>];
+
+  b5 [shape=diamond, style=filled, fillcolor="#E6F4EA", color="#2F855A", margin="0.05,0.05",
+      label=<<B>5 · DECISÃO DE TOOL</B><BR/>Há dado suficiente (ficha, histórico,<BR/>procedimento, métrica) ou é preciso<BR/>consultar tool / base?>];
+
+  b6 [fillcolor="#E6F4EA", color="#2F855A", label=<<B>6 · EXECUÇÃO DA TOOL</B> (retorno simulado)<BR/>consultar_ativo (ficha + criticidade) · consultar_historico_falhas (FSM)<BR/>consultar_procedimento (POP) · calcular_metricas_confiabilidade (λ, MTBF, R(t))<BR/>listar_ativos_por_criticidade · <B>abrir_ordem_servico</B> só após rascunho<BR/>+ confirmação explícita do engenheiro (regra 10)<BR/>Resultado é reinjetado no contexto e o LLM é chamado de novo>];
+
+  erro [fillcolor="#FFF1D6", color="#B7791F", label=<<B>Erro de tool</B> (ativo_nao_encontrado, timeout)<BR/>1 nova tentativa; se persistir: "Não encontrei esse dado<BR/>na base de conhecimento." + orientar consulta ao FSM (regras 5, 13)>];
+
+  b7 [shape=diamond, style=filled, fillcolor="#FFF1D6", color="#B7791F", margin="0.05,0.05",
+      label=<<B>7 · GUARDRAIL DE SAÍDA</B><BR/>TAG citado existe nos retornos das tools?<BR/>Fonte citada? FATO × HIPÓTESE rotulados?<BR/>Prioridade com conta S, A, D? Nível de confiança?<BR/>Sem dado pessoal nem passo de intervenção de risco?>];
+
+  regen [fillcolor="#FDE2E1", color="#B83232", label=<Reprovou: regenera 1 vez com a falha apontada;<BR/>se reprovar de novo, resposta padrão de "dado não confirmado">];
+
+  b8 [label=<<B>8 · RESPOSTA + HISTÓRICO</B><BR/>Entrega no FORMATO definido (Fato, Hipótese, Recomendação,<BR/>Prioridade, Nível de confiança) · grava o turno no histórico<BR/>Política de contexto: a cada 6 turnos oferece resumo; acima do limite<BR/>mantém resumo + 6 últimas mensagens e reafirma o TAG>];
+
+  b1 -> b2;
+  b2 -> b3 [label="  aprovado", color="#2F855A", fontcolor="#2F855A"];
+  b2 -> recusa [label="  reprovado", color="#B83232", fontcolor="#B83232"];
+  b3 -> b4;
+  b4 -> b5;
+  b5 -> b6 [label="  precisa de tool / base", color="#2F855A", fontcolor="#2F855A"];
+  b6 -> b3 [label="  reinjeta resultado", constraint=false, style=dashed];
+  b6 -> erro [label="  falhou", color="#B7791F", fontcolor="#B7791F"];
+  erro -> b7 [style=dashed];
+  b5 -> b7 [label="  informação suficiente"];
+  b7 -> b8 [label="  aprovado", color="#2F855A", fontcolor="#2F855A"];
+  b7 -> regen [label="  reprovado", color="#B83232", fontcolor="#B83232"];
+  regen -> b4 [style=dashed, constraint=false];
+  recusa -> b8 [style=dashed];
+
+  {rank=same; b2; recusa;}
+  {rank=same; b6; erro;}
+  {rank=same; b7; regen;}
+}

@@ -1,0 +1,279 @@
+{
+  "projeto": "EngMan Copilot",
+  "versao": "sprint1",
+  "observacao": "Contrato das tools em JSON Schema (formato 'function calling'). Todas operam sobre a base SIMULADA. Nenhuma tool é implementada nesta Sprint; o retorno é especificado para a Sprint de validação.",
+  "convencoes": {
+    "formato_tag": "^(CFTV|PMV|CBX)-R[0-9]{2}-K[0-9]{3}-[0-9]{2}$",
+    "exemplo_tag": "CFTV-R01-K412-01",
+    "enums_compartilhados": {
+      "tipo_ativo": ["CFTV", "PMV", "CBX"],
+      "tipo_intervencao": ["corretiva", "preventiva", "inspecao", "cbm"],
+      "prioridade": ["P1", "P2", "P3", "P4"]
+    },
+    "formato_erro": {
+      "ok": false,
+      "erro": "ativo_nao_encontrado | parametro_invalido | timeout | indisponivel",
+      "mensagem": "texto curto para o modelo",
+      "acao_modelo": "ver regras 5 e 13 do system prompt: informar o usuário, tentar de novo uma vez (apenas timeout/indisponivel) e orientar consulta direta ao FSM; nunca responder de memória"
+    }
+  },
+  "tools": [
+    {
+      "type": "function",
+      "status": "obrigatória",
+      "function": {
+        "name": "consultar_ativo",
+        "description": "Retorna a ficha de UM ativo identificado por TAG: tipo, fabricante, modelo, km, localização, data de instalação, vida útil e criticidade (A, B ou C). Use SEMPRE antes de afirmar qualquer característica do ativo ou de calcular prioridade. Não retorna histórico de falhas (use consultar_historico_falhas). Se o TAG não existir, devolve erro ativo_nao_encontrado; nesse caso não suponha outro TAG.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "pattern": "^(CFTV|PMV|CBX)-R[0-9]{2}-K[0-9]{3}-[0-9]{2}$",
+              "description": "TAG completo do ativo no formato do catálogo, por exemplo CFTV-R01-K412-01. Não aceita km solto nem nome de praça."
+            }
+          },
+          "required": ["tag"],
+          "additionalProperties": false
+        }
+      },
+      "retorno": {
+        "ok": true,
+        "tag": "string",
+        "tipo_ativo": "CFTV | PMV | CBX",
+        "fabricante": "string",
+        "modelo": "string",
+        "km": "integer",
+        "localizacao": "string",
+        "instalacao": "AAAA-MM",
+        "vida_util_anos": "integer",
+        "criticidade": "A | B | C",
+        "origem": "simulado"
+      },
+      "fonte_unica_de_verdade": "data/knowledge_base/catalogo_ativos.md"
+    },
+    {
+      "type": "function",
+      "status": "obrigatória",
+      "function": {
+        "name": "consultar_historico_falhas",
+        "description": "Retorna o histórico simulado de falhas de um ativo identificado por TAG, dentro de uma janela retroativa em meses: data, sintoma, causa identificada, tempo de reparo em horas, peça trocada e reincidência (mesma causa nos 90 dias anteriores). Use sempre que o usuário perguntar sobre reincidência, causa provável, padrão ou comportamento histórico de um equipamento. Retorna lista vazia (ok: true, falhas: []) se não houver falhas na janela; isso é diferente de ativo inexistente (erro ativo_nao_encontrado).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "pattern": "^(CFTV|PMV|CBX)-R[0-9]{2}-K[0-9]{3}-[0-9]{2}$",
+              "description": "TAG completo do ativo, por exemplo CFTV-R01-K412-01."
+            },
+            "janela_meses": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60,
+              "default": 12,
+              "description": "Janela retroativa em meses a partir da data atual. Padrão 12. Use 12 para diagnóstico e 24 ou mais para análise de tendência."
+            },
+            "tipo_falha": {
+              "type": "string",
+              "enum": ["comunicacao", "alimentacao", "lente_imagem", "mecanica", "controlador", "umidade", "audio", "geolocalizacao"],
+              "description": "Filtro opcional pela natureza da falha. Omita para trazer todas."
+            }
+          },
+          "required": ["tag"],
+          "additionalProperties": false
+        }
+      },
+      "retorno": {
+        "ok": true,
+        "tag": "string",
+        "janela_meses": "integer",
+        "total": "integer",
+        "falhas": [
+          {
+            "id": "string (ex.: F001)",
+            "data": "AAAA-MM-DD",
+            "sintoma": "string",
+            "causa": "string",
+            "tempo_reparo_h": "number",
+            "peca_trocada": "string",
+            "reincidencia": "sim | nao"
+          }
+        ],
+        "origem": "simulado"
+      },
+      "fonte_unica_de_verdade": "data/knowledge_base/historico_falhas_fsm.md"
+    },
+    {
+      "type": "function",
+      "status": "obrigatória",
+      "function": {
+        "name": "abrir_ordem_servico",
+        "description": "Abre uma ordem de serviço (SIMULADA) e devolve o número da OS. AÇÃO DE ESCRITA: só chame depois de mostrar o rascunho ao engenheiro e receber confirmação explícita ('confirmo', 'pode abrir'); nesse caso envie confirmado_pelo_engenheiro = true. Nunca chame por inferência. Não use para consultar OS existentes.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "pattern": "^(CFTV|PMV|CBX)-R[0-9]{2}-K[0-9]{3}-[0-9]{2}$",
+              "description": "TAG completo do ativo que receberá a intervenção."
+            },
+            "tipo_intervencao": {
+              "type": "string",
+              "enum": ["corretiva", "preventiva", "inspecao", "cbm"],
+              "description": "corretiva: ativo falhou; preventiva: tarefa do plano; inspecao: suspeita sem falha confirmada; cbm: disparada por condição medida."
+            },
+            "prioridade": {
+              "type": "string",
+              "enum": ["P1", "P2", "P3", "P4"],
+              "description": "Prioridade calculada pela matriz de criticidade (P1 até 4 h, P2 até 24 h, P3 até 72 h, P4 próxima janela preventiva)."
+            },
+            "descricao": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 600,
+              "description": "Texto da OS: sintoma, hipótese marcada como hipótese, ação recomendada e fontes. Sem dados pessoais."
+            },
+            "janela_inicio": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Início da janela de atendimento, ISO 8601."
+            },
+            "janela_fim": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Fim da janela de atendimento, ISO 8601, posterior a janela_inicio."
+            },
+            "confirmado_pelo_engenheiro": {
+              "type": "boolean",
+              "const": true,
+              "description": "Deve ser true e só pode ser enviado após confirmação explícita do engenheiro na conversa."
+            }
+          },
+          "required": ["tag", "tipo_intervencao", "prioridade", "descricao", "janela_inicio", "janela_fim", "confirmado_pelo_engenheiro"],
+          "additionalProperties": false
+        }
+      },
+      "retorno": {
+        "ok": true,
+        "numero_os": "string simulada, ex.: OS-SIM-000123",
+        "status": "aberta",
+        "origem": "simulado"
+      },
+      "fonte_unica_de_verdade": "sistema de OS simulado (sem cópia na base)"
+    },
+    {
+      "type": "function",
+      "status": "obrigatória",
+      "function": {
+        "name": "consultar_procedimento",
+        "description": "Retorna o POP aplicável (versão vigente) para um tipo de ativo e um tipo de intervenção: pré-requisitos de segurança (desenergização, EPI, sinalização, NR-10/NR-35), passo a passo numerado e identificação do documento (ex.: POP-CFTV-01). Use ao montar OS, ao responder 'como fazer' e ao recusar pedido de risco operacional, para citar os pré-requisitos de segurança. Se não houver POP para a combinação, devolve erro ativo_nao_encontrado com mensagem 'sem POP'; nesse caso encaminhe ao responsável.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tipo_ativo": {
+              "type": "string",
+              "enum": ["CFTV", "PMV", "CBX"],
+              "description": "Tipo do ativo: CFTV (câmera PTZ), PMV (painel de mensagens variáveis) ou CBX (callbox)."
+            },
+            "tipo_intervencao": {
+              "type": "string",
+              "enum": ["corretiva", "preventiva", "inspecao", "cbm"],
+              "description": "Tipo de intervenção para a qual se quer o procedimento."
+            }
+          },
+          "required": ["tipo_ativo", "tipo_intervencao"],
+          "additionalProperties": false
+        }
+      },
+      "retorno": {
+        "ok": true,
+        "pop_id": "string (ex.: POP-CFTV-01)",
+        "versao": "string",
+        "pre_requisitos_seguranca": ["string"],
+        "passos": ["string"],
+        "origem": "simulado"
+      },
+      "fonte_unica_de_verdade": "data/knowledge_base (POPs), versão vigente nos metadados"
+    },
+    {
+      "type": "function",
+      "status": "diferencial",
+      "function": {
+        "name": "calcular_metricas_confiabilidade",
+        "description": "Calcula, a partir do histórico de falhas do FSM, a taxa de falha λ (falhas/h), o MTBF (h), o MTTR (h) e a confiabilidade R(t) = e^(-λ·t) para t = 720 h e t = 2160 h, assumindo taxa de falha constante (modelo exponencial). Use para qualquer pergunta com MTBF, λ, MTTR, R(t) ou tendência; NUNCA calcule de cabeça. Informe sempre a premissa de λ constante e o número de falhas ao apresentar o resultado.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "pattern": "^(CFTV|PMV|CBX)-R[0-9]{2}-K[0-9]{3}-[0-9]{2}$",
+              "description": "TAG completo do ativo."
+            },
+            "periodo_meses": {
+              "type": "integer",
+              "minimum": 3,
+              "maximum": 60,
+              "description": "Janela de análise em meses."
+            },
+            "tempo_operacao_horas": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Horas de operação do ativo na janela (ativo contínuo: 730 h por mês). Se o usuário não souber, use 730 × periodo_meses e declare a premissa."
+            }
+          },
+          "required": ["tag", "periodo_meses", "tempo_operacao_horas"],
+          "additionalProperties": false
+        }
+      },
+      "retorno": {
+        "ok": true,
+        "tag": "string",
+        "n_falhas": "integer",
+        "lambda_por_hora": "number",
+        "mtbf_h": "number",
+        "mttr_h": "number",
+        "r_720h": "number (0 a 1)",
+        "r_2160h": "number (0 a 1)",
+        "tendencia": "estavel | crescente | decrescente | indeterminada (n < 5)",
+        "premissas": "taxa de falha constante",
+        "origem": "simulado"
+      },
+      "fonte_unica_de_verdade": "derivado de historico_falhas_fsm.md (sem cópia)"
+    },
+    {
+      "type": "function",
+      "status": "diferencial",
+      "function": {
+        "name": "listar_ativos_por_criticidade",
+        "description": "Retorna o ranking de ativos por criticidade (A antes de B antes de C) e, dentro da mesma criticidade, por número de falhas abertas ou reincidentes nos últimos 90 dias, com limite de itens. Use para perguntas do tipo 'quais ativos merecem atenção primeiro'. O ranking usa apenas criticidade e reincidência; nunca rodovia, região ou praça.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tipo_ativo": {
+              "type": "string",
+              "enum": ["CFTV", "PMV", "CBX"],
+              "description": "Filtro opcional por tipo de ativo. Omita para listar os três tipos."
+            },
+            "limite": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 10,
+              "description": "Número máximo de ativos retornados. Padrão 10."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "retorno": {
+        "ok": true,
+        "ativos": [
+          {"tag": "string", "criticidade": "A | B | C", "falhas_90d": "integer", "reincidencias_90d": "integer"}
+        ],
+        "origem": "simulado"
+      },
+      "fonte_unica_de_verdade": "derivado de catalogo_ativos.md + historico_falhas_fsm.md (sem cópia)"
+    }
+  ]
+}

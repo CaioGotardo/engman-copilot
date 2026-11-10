@@ -1,0 +1,11 @@
+CHALLENGE SPRINT 01 - ENGMAN COPILOT (FIAP x MOTIVA)
+
+Grupo: 07 - Turma 1CCPS
+Recorte escolhido: A - Diagnostico e Confiabilidade
+
+Integrantes:
+Caio Gotardo - RM 574768 - 1CCPS
+Gabriel Akira - RM 576082 - 1CCPS
+
+Repositorio: https://github.com/PREENCHER-usuario/engman-copilot
+Fluxograma: https://github.com/PREENCHER-usuario/engman-copilot/blob/main/docs/arquitetura.png
